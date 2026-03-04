@@ -1,6 +1,4 @@
 import asyncio
-from asyncio import timeout
-
 from fastmcp import Client
 from config import SERVER_URL
 import logging
@@ -64,7 +62,7 @@ class MCPClient:
                 logging.info(f"[{trace_id}] run_tool/{tool_name}: {result}")
                 return {
                     "trace_id": trace_id,
-                    "result_tool": result,
+                    "result": result,
                 }
             except Exception as e:
                 logging.error(f"[{trace_id}] run_tool/{tool_name} failed: {e}")
@@ -73,6 +71,7 @@ class MCPClient:
 
 if __name__ == "__main__":
 
+    # Test code to run the MCP client and execute a tool call
     client_obj = MCPClient(base_url=SERVER_URL)
 
     # We run the async function inside asyncio with handle it in parallel

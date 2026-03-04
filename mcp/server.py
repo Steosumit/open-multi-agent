@@ -1,4 +1,4 @@
-from config import LOG_FILE_PATH
+from config import LOG_FILE_PATH, SERVER_PORT
 from fastmcp import FastMCP
 import os
 import logging
@@ -61,4 +61,4 @@ def read_logs() -> str:
 
 if __name__ == "__main__":
     # HTTP transport
-    mcp.run(transport="http", host="0.0.0.0", port=9000)
+    mcp.run(transport="http", host="0.0.0.0", port=SERVER_PORT)
