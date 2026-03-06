@@ -1,4 +1,6 @@
-from config import LOG_FILE_PATH, SERVER_PORT
+import pathlib
+
+from mcp_local.config import LOG_FILE_PATH, SERVER_PORT
 from fastmcp import FastMCP
 import os
 import logging
@@ -19,14 +21,14 @@ mcp = FastMCP(
 )
 
 
-### All the tools ###
-@mcp.tool
+# TOOLS #
+@mcp.tool(name="tool_health_check")
 def tool_health_check() -> str:
     """Used to check if the server is running."""
     return "Server is healthy and running."
 
 
-### All the resources ###
+# RESOURCES #
 @mcp.resource(
     uri="data://logs",
     name="logs",
@@ -55,8 +57,31 @@ def read_logs() -> str:
     return str(logs)
 
 
-### All the prompts ###
-#@mcp.prompt
+# PROMPTS #
+@mcp.prompt(name="list_tools", description="List all available tools in system prompt.")
+
+def system_prompt() -> str:
+    """
+    System prompt listing all registered tools dynamically.
+    Returns:
+        Formatted string of all available tool names and descriptions.
+    """
+
+    # Prepare the tool list context
+    tools = mcp.list_tools()  # fetch registered tools from FastMCP
+    tool_lines = "\n".join(
+        f"- {tool.name}: {tool.description or 'No description provided.'}"
+        for tool in tools.values()
+    )
+
+    # Prepare the final SYSTEM_PROMPT by reading from SYSTEM.md
+    _SYSTEM_MD = pathlib.Path(__file__).parent.parent / "core" / "SYSTEM.md"
+    with open(_SYSTEM_MD, "r") as f:
+        system_prompt = f.read()
+
+    final_system_prompt = system_prompt + "\n\n" + f"The following tools are available:\n{tool_lines}"
+
+    return final_system_prompt
 
 
 if __name__ == "__main__":

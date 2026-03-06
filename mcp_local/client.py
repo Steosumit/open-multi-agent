@@ -1,6 +1,8 @@
 import asyncio
 from fastmcp import Client
-from config import SERVER_URL
+from langchain_mcp_adapters.tools import load_mcp_tools
+
+from mcp_local.config import SERVER_URL
 import logging
 
 
@@ -15,6 +17,32 @@ class MCPClient:
 
     def __init__(self, base_url: str) -> None:
         self._client = Client(base_url)
+
+    # TODO: fix possible error in listing tools
+    async def list_tools_output_by_session(self):
+        """
+        Helper method to list tools with logging. We return a _client.session object and use load_mcp_tools
+        to convert to langchain suitable tool
+        """
+
+        # Convert the MCP tool to LangChain StructuredTool
+        async with self._client:
+            try:
+                session = self._client.session
+                lc_tools = await load_mcp_tools(session)
+                return lc_tools
+            except Exception as e:
+                logging.error(f"list_tools_output_by_session failed: {e}")
+                raise
+
+        # try:
+        #     async with self._client:
+        #         result =  await self._client.list_tools()
+        #         logging.info(f"list_tools_output: {result}")
+        #         return result
+        # except Exception as e:
+        #     logging.error(f"list_tools_output failed: {e}")
+        #     raise
 
     @staticmethod
     def _build_tool_payload(trace_id: str, tool_name: str, arguments: dict) -> tuple[str, dict]:
@@ -51,6 +79,7 @@ class MCPClient:
             result = await self.client.list_resources()
             logging.info(f"list_resources: {result}")
 
+    # TODO: add methods to expose resources and prompts
     async def run_tool(self, trace_id: str, tool_name: str, arguments: dict) -> dict:
         """Execute a tool via MCP call_tool."""
 
