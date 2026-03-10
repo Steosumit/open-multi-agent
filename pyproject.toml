@@ -7,6 +7,9 @@ dependencies = [
     "fastmcp>=3.0.0",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["app", "core", "mcp_local"]
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
