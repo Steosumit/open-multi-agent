@@ -58,9 +58,9 @@ def read_logs() -> str:
 
 
 # PROMPTS #
-@mcp.prompt(name="list_tools", description="List all available tools in system prompt.")
+@mcp.prompt(name="system_prompt", description="Provide the system prompt with tools on startup")
 
-def system_prompt() -> str:
+async def system_prompt() -> str:
     """
     System prompt listing all registered tools dynamically.
     Returns:
@@ -68,20 +68,18 @@ def system_prompt() -> str:
     """
 
     # Prepare the tool list context
-    tools = mcp.list_tools()  # fetch registered tools from FastMCP
+    tools = await mcp.list_tools()  # fetch registered tools from FastMCP
     tool_lines = "\n".join(
         f"- {tool.name}: {tool.description or 'No description provided.'}"
-        for tool in tools.values()
+        for tool in tools
     )
 
     # Prepare the final SYSTEM_PROMPT by reading from SYSTEM.md
     _SYSTEM_MD = pathlib.Path(__file__).parent.parent / "core" / "SYSTEM.md"
     with open(_SYSTEM_MD, "r") as f:
-        system_prompt = f.read()
+        system_prompt_text = f.read()
 
-    final_system_prompt = system_prompt + "\n\n" + f"The following tools are available:\n{tool_lines}"
-
-    return final_system_prompt
+    return system_prompt_text + "\n\n" + f"The following tools are available:\n{tool_lines}"
 
 
 if __name__ == "__main__":

@@ -1,4 +1,6 @@
 import asyncio
+from typing import Union, Optional
+
 from fastmcp import Client
 from langchain_mcp_adapters.tools import load_mcp_tools
 
@@ -18,7 +20,6 @@ class MCPClient:
     def __init__(self, base_url: str) -> None:
         self._client = Client(base_url)
 
-    # TODO: fix possible error in listing tools
     async def list_tools_output_by_session(self):
         """
         Helper method to list tools with logging. We return a _client.session object and use load_mcp_tools
@@ -45,22 +46,23 @@ class MCPClient:
         #     raise
 
     @staticmethod
-    def _build_tool_payload(trace_id: str, tool_name: str, arguments: dict) -> tuple[str, dict]:
+    def _build_tool_payload(trace_id: str, mcp_name: str, call_type: Union["tool", "resource", "prompt"], arguments: Optional[dict] = None) -> tuple[str, dict, str]:
         """Build and log tool call payload with tracing.
 
         Args:
             trace_id: Trace identifier for logging.
-            tool_name: Registered MCP tool name.
+            mcp_name: Registered MCP tool name.
             arguments: Flexible input arguments.
 
         Returns:
             Tuple of (tool_name, arguments).
         """
 
-        logging.info(f"[{trace_id}] Building payload for tool: {tool_name}")
+        logging.info(f"[{trace_id}] Building payload for {call_type}: {mcp_name}")
 
         # TODO: Implement tracing logic and history management here later
-        return tool_name, arguments
+
+        return mcp_name, arguments, call_type
 
     @staticmethod
     async def check(self):
@@ -79,23 +81,60 @@ class MCPClient:
             result = await self.client.list_resources()
             logging.info(f"list_resources: {result}")
 
-    # TODO: add methods to expose resources and prompts
-    async def run_tool(self, trace_id: str, tool_name: str, arguments: dict) -> dict:
+    # TODO: verify the tool, resource, prompt method use from fastapi gateway to orchestrator
+    async def run_client(self, trace_id: str, mcp_name: str, call_type: Union["tool", "resource", "prompt"], arguments: Optional[dict] = None):
         """Execute a tool via MCP call_tool."""
 
-        name, args = self._build_tool_payload(trace_id, tool_name, arguments)
+        # Fix empty dict input
+        arguments = arguments or {}
 
-        async with self._client:
-            try:
-                result = await self._client.call_tool(name, args, timeout=5)
-                logging.info(f"[{trace_id}] run_tool/{tool_name}: {result}")
-                return {
-                    "trace_id": trace_id,
-                    "result": result,
-                }
-            except Exception as e:
-                logging.error(f"[{trace_id}] run_tool/{tool_name} failed: {e}")
-                raise
+        name, args, call_type = self._build_tool_payload(trace_id, mcp_name, call_type, arguments)
+
+        if call_type == "tool":
+
+            async with self._client:
+                try:
+                    result = await self._client.call_tool(name, args, timeout=5)
+                    logging.info(f"[{trace_id}] run_tool/{mcp_name}: {result}")
+                    return {
+                        "trace_id": trace_id,
+                        "result": result,
+                    }
+                except Exception as e:
+                    logging.error(f"[{trace_id}] run_tool/tool/{mcp_name} failed: {e}")
+                    raise
+
+        elif call_type == "resource":
+
+            async with self._client:
+                try:
+                    result = await self._client.read_resource(uri=mcp_name)  # actually tool_name is resource_uri in this case
+                    logging.info(f"[{trace_id}] run_tool/resource/{mcp_name}: {result}")
+                    return {
+                        "trace_id": trace_id,
+                        "result": result,
+                    }
+                except Exception as e:
+                    logging.error(f"[{trace_id}] run_tool/resource/{mcp_name} failed: {e}")
+                    raise
+
+        elif call_type == "prompt":
+
+            async with self._client:
+
+                try:
+                    result = await self._client.get_prompt(mcp_name)  # actually tool_name is prompt_name in this case, arguments can be used for dynamic prompts in the future
+                    logging.info(f"[{trace_id}] run_tool/prompt/{mcp_name}: {result}")
+                    return {
+                        "trace_id": trace_id,
+                        "result": result,
+                    }
+                except Exception as e:
+                    logging.error(f"[{trace_id}] run_tool/prompt/{mcp_name} failed: {e}")
+                    raise
+        else:
+            logging.error(f"[{trace_id}] Invalid call_type: {call_type}")
+            raise ValueError(f"Invalid call_type: {call_type}")
 
 
 if __name__ == "__main__":
@@ -105,7 +144,7 @@ if __name__ == "__main__":
 
     # We run the async function inside asyncio with handle it in parallel
     output = asyncio.run(
-        client_obj.run_tool("trace-123", "tool_health_check", {})
+        client_obj.run_client("trace-123", "tool_health_check", {})
     )
     logging.info(f"Tool execution result: {output}")
 

@@ -1,11 +1,11 @@
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, Optional
+
 
 # Model to validate agent task requests
 class AgentTaskRequest(BaseModel):
-    tool_name: str
-    arguments: dict
-
+    message: str
+    trace_id: Optional[str] = None
 # Model to validate agent task responses
 class AgentTaskResponse(BaseModel):
     trace_id: str
