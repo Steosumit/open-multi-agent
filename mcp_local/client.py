@@ -81,7 +81,7 @@ class MCPClient:
             result = await self.client.list_resources()
             logging.info(f"list_resources: {result}")
 
-    # TODO: verify the tool, resource, prompt method use from fastapi gateway to orchestrator
+    # tool, resource, prompt method use from fastapi gateway to orchestrator
     async def run_client(self, trace_id: str, mcp_name: str, call_type: Union["tool", "resource", "prompt"], arguments: Optional[dict] = None):
         """Execute a tool via MCP call_tool."""
 

@@ -1,10 +1,10 @@
+import logging
+import os
 import pathlib
 
-from mcp_local.config import LOG_FILE_PATH, SERVER_PORT
 from fastmcp import FastMCP
-import os
-import logging
 
+from mcp_local.config import LOG_FILE_PATH, SERVER_PORT
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,11 +35,12 @@ def tool_health_check() -> str:
     description="Provides logs for all the past processes",
     tags={"monitoring", "status", "logs", "personal logs"},
 )
-
 def read_logs() -> str:
     """Read the latest logs from the system."""
 
-    logging.info(f"Reading logs from: {LOG_FILE_PATH}")  # Debug statement to check the log file path
+    logging.info(
+        f"Reading logs from: {LOG_FILE_PATH}"
+    )  # Debug statement to check the log file path
 
     try:
         os.makedirs(LOG_FILE_PATH.parent, exist_ok=True)
@@ -48,18 +49,23 @@ def read_logs() -> str:
                 pass
             logs = "No logs file found. A new log file has been created."
         else:
-            logs = open(LOG_FILE_PATH, "r").read().splitlines()[-100:]  # Read the last 100 lines of logs
+            logs = (
+                open(LOG_FILE_PATH, "r").read().splitlines()[-100:]
+            )  # Read the last 100 lines of logs
         logging.info(f"read_logs: successfully read logs")
     except OSError as e:
         logging.error(f"read_logs: Failed to read logs : {e}")
-        logs = ["Something went wrong while reading logs. Please check the server logs for more details."]
+        logs = [
+            "Something went wrong while reading logs. Please check the server logs for more details."
+        ]
 
     return str(logs)
 
 
 # PROMPTS #
-@mcp.prompt(name="system_prompt", description="Provide the system prompt with tools on startup")
-
+@mcp.prompt(
+    name="system_prompt", description="Provide the system prompt with tools on startup"
+)
 async def system_prompt() -> str:
     """
     System prompt listing all registered tools dynamically.
@@ -79,7 +85,11 @@ async def system_prompt() -> str:
     with open(_SYSTEM_MD, "r") as f:
         system_prompt_text = f.read()
 
-    return system_prompt_text + "\n\n" + f"The following tools are available:\n{tool_lines}"
+    return (
+        system_prompt_text
+        + "\n\n"
+        + f"The following tools are available:\n{tool_lines}"
+    )
 
 
 if __name__ == "__main__":

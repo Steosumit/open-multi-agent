@@ -1,38 +1,29 @@
 """
 This module contains code to orchestrate the execution of the LLM agent
 """
+
 import asyncio
 import logging
 import operator
 from typing import Literal
+
 from dotenv import load_dotenv
-from langchain_core.tools import StructuredTool
-
-from langchain_google_genai import GoogleGenerativeAI, ChatGoogleGenerativeAI
-from langchain_mcp_adapters.tools import load_mcp_tools
-from pydantic import create_model
-
-from core.config import LLM_MODEL, LLM_TEMPERATURE
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage, ToolMessage
-from langgraph.constants import START, END
-from typing_extensions import Annotated, TypedDict
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.constants import END, START
 from langgraph.graph import StateGraph
+from langgraph.pregel.debug import RunnableConfig
+from typing_extensions import Annotated, TypedDict
 
+from core.config import LLM_MODEL, LLM_TEMPERATURE, get_short_term_memory_config
 from mcp_local.client import MCPClient
 from mcp_local.config import SERVER_URL
+from memory.short_term import get_short_term_memory
 
 load_dotenv(verbose=True)
 
 # MCP client — single instance shared across nodes #
 mcp_client = MCPClient(base_url=SERVER_URL)
-
-
-# LLM #
-model_raw = ChatGoogleGenerativeAI(
-    model= LLM_MODEL,
-    temperature= LLM_TEMPERATURE
-)
 
 
 # State #
@@ -45,9 +36,15 @@ class MessagesState(TypedDict):
 # Nodes #
 async def llm_node(state: MessagesState) -> dict:
     """LLM decides whether to call a tool or not."""
-
+    
+    # LLM #
+    model_raw = ChatGoogleGenerativeAI(model=LLM_MODEL, temperature=LLM_TEMPERATURE)
+    
     # Get the latest raw tool list from the mcp server at each run
-    tools = await mcp_client.list_tools_output_by_session()  # fetch the latest tools from MCP server
+    # mcp tools are converted to langchain compatible tools
+    tools = (
+        await mcp_client.list_tools_output_by_session()
+    )  # fetch the latest tools from MCP server
     model = model_raw.bind_tools(tools)
 
     # Attach the system prompt with dynamic tool description
@@ -61,13 +58,13 @@ async def llm_node(state: MessagesState) -> dict:
     return {
         "messages": [
             await model.ainvoke(
-                [SystemMessage(content=system_text)]
-                + state["messages"]
+                [SystemMessage(content=system_text)] + state["messages"]
             )
         ],
         "llm_calls": state.get("llm_calls", 0) + 1,
         "trace_id": state.get("trace_id", "trace_id not set"),
     }
+
 
 async def tool_node(state: MessagesState) -> dict[str, list[ToolMessage]]:
     """Performs MCP tool calls for all tool_calls in the last message."""
@@ -97,6 +94,7 @@ async def tool_node(state: MessagesState) -> dict[str, list[ToolMessage]]:
 
     return {"messages": results}
 
+
 def should_continue(state: MessagesState) -> Literal["tool_node", "__end__"]:
     """Decide if we should continue the loop or stop based upon whether the LLM made a tool call"""
 
@@ -123,12 +121,11 @@ agent_builder.add_edge(START, "llm_node")
 agent_builder.add_conditional_edges(
     "llm_node",
     should_continue,
-    ["tool_node", END]  # choices that should_continue can return
+    ["tool_node", END],  # choices that should_continue can return
 )
-agent_builder.add_edge("tool_node", "llm_node")  # connect tool_node back to llm_node to create a loop
-
-# Compile the agent
-agent = agent_builder.compile()
+agent_builder.add_edge(
+    "tool_node", "llm_node"
+)  # connect tool_node back to llm_node to create a loop
 
 
 async def run_agent(message: str, trace_id: str) -> str:
@@ -141,21 +138,46 @@ async def run_agent(message: str, trace_id: str) -> str:
     Returns:
         The final assistant response as a string.
     """
-    result = await agent.ainvoke({
-        "messages": [HumanMessage(content=message)],
-        "trace_id": trace_id,
-        "llm_calls": 0,
-    })
-    return str(result["messages"][-1].content)
+
+    # Compile the agent after yielding a redis checkpointer
+    async with get_short_term_memory() as checkpointer:
+        # Compile the agent with the checkpointer
+        agent = agent_builder.compile(checkpointer=checkpointer)
+
+        # Define config
+        config: RunnableConfig = get_short_term_memory_config(thread_id=trace_id)
+
+        result = await agent.ainvoke(
+            {
+                "messages": [HumanMessage(content=message)],
+                "trace_id": trace_id,
+                "llm_calls": 0,
+            },
+            config=config,  # use trace_id to identify the same conversation thread in short term memory
+        )
+        return str(result["messages"][-1].content)
+
+        # TODO: add summarization for short term memory based on long term memory
 
 
 if __name__ == "__main__":
-    asyncio.run(run_agent(
-        message="call health_check_tool and then name the tools available to you",
-        trace_id="test-trace-123",
-    ))
-
-
-
-
-
+    
+    async def main():
+        print("-" * 50)
+        print("Test 1: Setting memory")
+        print("-" * 50)
+        res1 = await run_agent(
+            message="my name is bob",
+            trace_id="test-trace-123",
+        )
+        print(f"Agent Response 1: {res1}\n")
+        print("-" * 50)
+        print("Test 2: Retrieving memory")
+        print("-" * 50)
+        res2 = await run_agent(
+            message="what is my name?",
+            trace_id="test-trace-123",
+        )
+        print(f"Agent Response 2: {res2}")
+        print("-" * 50)
+    asyncio.run(main())
