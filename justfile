@@ -13,24 +13,36 @@ default:
 # Run all from the orchestrator (agent test)
 run-orchestrator: mcp redis-dev orchestrator
 
-# Run all from the gateway (full test)
-run-gateway: mcp redis-dev gateway
-
-
 # Start Redis Docker container
 
-# Start Redis in detached mode
+# Start Redis (Create if missing, or start existing)
 redis-dev:
-    docker run --name redis-short-term -p 6379:6379 redis:latest
-
+    # Try to run specific container, suppress error if it exists
+    -docker run --name redis-short-term -p 6379:6379 redis:latest 2> $null
+    # Ensure it's started
+    @docker start redis-short-term
+    
 # Start Redis in detached mode
 redis:
-    docker run -d --name redis-short-term -p 6379:6379 redis:latest
-
+    -docker run -d --name redis-short-term -p 6379:6379 redis:latest
+    docker start redis-short-term
+    
 # Kill the redis container
 redis-clean:
     docker stop redis-short-term
     docker rm redis-short-term
+
+# Start ChromaDB container
+chromadb-dev:
+    # Suppress error if container already exists error comes
+    -docker run --name chroma-server -p 8000:8000 chromadb/chroma
+    # attempt to start the container
+    docker start chroma-server
+
+# Kill the redis container
+chromadb-clean:
+    docker stop chroma-server
+    docker rm chroma-server
 
 
 # Run the MCP Server

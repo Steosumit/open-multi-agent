@@ -1,8 +1,10 @@
 """
 This module contains code to manage short term memory using redis
+
+Requirement:
+    Needs a redis server be running
 """
 
-import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from core.config import REDIS_URL

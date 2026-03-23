@@ -90,6 +90,22 @@ async def system_prompt() -> str:
         + "\n\n"
         + f"The following tools are available:\n{tool_lines}"
     )
+    
+@mcp.prompt(
+    name="summary_prompt", description="Provide the prompt to summarize a bunch of messages in memory management"
+)
+async def summary_prompt() -> str:
+    """
+    Prompt for summarizing messages in memory management.
+    Returns:
+        A string prompt that guides the summarization of messages.
+    """
+    return (
+        "You are a helpful assistant that summarizes the following message into very concise summaries. "
+        "Focus on extracting key information, main points, and any actionable items. "
+        "Provide a clear and concise summary that captures the essence of the messages."
+    )
+    
 
 
 if __name__ == "__main__":
