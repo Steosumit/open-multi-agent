@@ -17,14 +17,12 @@ run-orchestrator: mcp redis-dev orchestrator
 
 # Start Redis (Create if missing, or start existing)
 redis-dev:
-    # Try to run specific container, suppress error if it exists
-    -docker run --name redis-short-term -p 6379:6379 redis:latest 2> $null
-    # Ensure it's started
+    -docker run -d --name redis-short-term -p 6379:6379 redis:latest 2> $null
     @docker start redis-short-term
     
 # Start Redis in detached mode
 redis:
-    -docker run -d --name redis-short-term -p 6379:6379 redis:latest
+    -docker run --name redis-short-term -p 6379:6379 redis:latest
     docker start redis-short-term
     
 # Kill the redis container
@@ -34,9 +32,7 @@ redis-clean:
 
 # Start ChromaDB container
 chromadb-dev:
-    # Suppress error if container already exists error comes
-    -docker run --name chroma-server -p 8000:8000 chromadb/chroma
-    # attempt to start the container
+    docker run --name chroma-server -p 8000:8000 chromadb/chroma
     docker start chroma-server
 
 # Kill the redis container
@@ -57,4 +53,16 @@ orchestrator:
 
 # Run the FastAPI Gateway
 gateway:
-    uvicorn app.main:app --reload
+    uvicorn app.main:app --port 8001 --reload
+
+# Start OpenTelemetry Collector + Jaeger
+obs-up:
+    docker compose -f ops/docker-compose.observability.yml up
+
+# Stop OpenTelemetry Collector + Jaeger
+obs-down:
+    docker compose -f ops/docker-compose.observability.yml down
+
+# Show observability stack status
+obs-ps:
+    docker compose -f ops/docker-compose.observability.yml ps

@@ -5,7 +5,7 @@ import httpx
 from httpx import AsyncClient, ASGITransport
 
 from main import app
-from mcp.config import SERVER_URL
+from mcp_local.config import SERVER_URL
 
 # ---------------------------------------------------------------------------
 # Constants
