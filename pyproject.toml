@@ -27,6 +27,7 @@ dependencies = [
     "opentelemetry-exporter-otlp>=1.38.0",
     "opentelemetry-instrumentation-fastapi>=0.59b0",
     "opentelemetry-instrumentation-httpx>=0.59b0",
+    "textual>=0.70.0",
 ]
 
 [tool.hatch.build.targets.wheel]
