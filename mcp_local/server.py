@@ -14,6 +14,7 @@ from observability import (
     init_observability,
     set_span_correlation,
 )
+from security.argument_sanitizer import sanitize_args
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,12 +42,12 @@ _server_latency_ms = _meter.create_histogram(
 
 
 def _extract_app_trace_id(ctx: Context) -> str | None:
-    
+
     params = None
     if not (ctx.request_context and ctx.request_context.request):
         params = getattr(ctx.request_context.request, "params", None)
         return None
-        
+
     if params is None:
         return None
 
@@ -64,16 +65,17 @@ def _extract_app_trace_id(ctx: Context) -> str | None:
 
     return None
 
+
 # Function to extract meta data from the request
 def _extract_meta(ctx: Context) -> dict[str, object]:
     """Extract metadata from the request context safely."""
     try:
         if not (ctx.request_context and ctx.request_context.request):
             return {}
-        
+
         request = ctx.request_context.request
         params = getattr(request, "params", {})
-        
+
         return params
     except (AttributeError, TypeError):
         # If anything fails, just return empty dict
@@ -91,7 +93,8 @@ mcp = FastMCP(
 
 # TOOLS #
 @mcp.tool(name="tool_health_check")
-def tool_health_check(ctx: Context) -> str:
+@sanitize_args("tool_health_check")
+def tool_health_check(ctx: Context, curr_time: str) -> str:
     """Used to check if the server is running."""
     start = time.perf_counter()
     attrs = {"handler": "tool_health_check", "mcp.call_type": "tool"}
@@ -107,7 +110,7 @@ def tool_health_check(ctx: Context) -> str:
         _server_latency_ms.record(
             (time.perf_counter() - start) * 1000, attributes=attrs
         )
-        return "Server is healthy and running."
+        return f"Server is healthy and running as of {curr_time}"
 
 
 # RESOURCES #

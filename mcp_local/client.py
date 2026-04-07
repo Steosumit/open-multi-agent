@@ -2,11 +2,13 @@ import asyncio
 import time
 from typing import Optional, Union
 
+import yaml
 from fastmcp import Client
 from langchain_mcp_adapters.tools import load_mcp_tools
 from opentelemetry.trace import Status, StatusCode
 
 import logging
+import pathlib
 
 from mcp_local.config import SERVER_URL
 from observability import (
@@ -17,6 +19,16 @@ from observability import (
     instrument_httpx_client,
     set_span_correlation,
 )
+
+
+def load_servers_config() -> list[dict]:
+    """Load MCP servers from servers.yaml config file."""
+    config_path = pathlib.Path(__file__).parent / "servers.yaml"
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+            return config.get("servers", [])
+    return []
 
 
 logging.basicConfig(
@@ -46,15 +58,52 @@ _mcp_call_latency_ms = _meter.create_histogram(
 
 
 class MCPClient:
-    """MCP tool runner using fastmcp async client."""
+    """MCP tool runner using fastmcp async client. Supports multiple servers."""
 
-    def __init__(self, base_url: str) -> None:
-        self._client = Client(base_url)
+    def __init__(self, base_url: str, servers_config: list[dict] | None = None) -> None:
+        self._default_client = Client(base_url)
+        self._servers: dict[str, Client] = {}
+
+        # Dynamically add servers from config
+        if servers_config:
+            for server in servers_config:
+                self.add_server(server["name"], server["url"])
+
+    def add_server(self, name: str, base_url: str) -> None:
+        """Register a new MCP server dynamically."""
+        self._servers[name] = Client(base_url)
+        logging.info(f"Registered MCP server: {name} at {base_url}")
+
+    async def list_tools_all(self) -> list:
+        """List tools from all registered servers with namespace prefix."""
+        all_tools = []
+
+        # Include default client tools (high control private server)
+        async with self._default_client:
+            session = self._default_client.session
+            tools = await load_mcp_tools(session)
+            for tool in tools:
+                tool.name = f"personal_{tool.name}"
+            all_tools.extend(tools)
+
+        # Include tools from all registered servers (for external servers)
+        for name, client in self._servers.items():
+            async with client:
+                session = client.session
+                tools = await load_mcp_tools(session)
+                # Prefix each tool name with server name to avoid collision
+                for tool in tools:
+                    tool.name = f"{name}_{tool.name}"
+                all_tools.extend(tools)
+
+        logging.info(f"Total tools loaded from all servers: {len(all_tools)}")
+        return all_tools
 
     async def list_tools_output_by_session(self):
         """
         Helper method to list tools with logging. We return a _client.session object and use load_mcp_tools
-        to convert to langchain suitable tool
+        to convert to langchain suitable tool.
+        Backward compatible - uses default client only.
         """
 
         start = time.perf_counter()
@@ -62,16 +111,20 @@ class MCPClient:
         with _tracer.start_as_current_span("mcp_client.list_tools") as span:
             try:
                 # Convert the MCP tool to LangChain StructuredTool
-                async with self._client:
-                    session = self._client.session
+                async with self._default_client:
+                    session = self._default_client.session
                     lc_tools = await load_mcp_tools(session)
+
                     _mcp_calls_total.add(1, attributes=attrs)
+
                     return lc_tools
+
             except Exception as e:
                 _mcp_errors_total.add(1, attributes=attrs)
                 span.set_status(Status(StatusCode.ERROR))
                 logging.error(f"list_tools_output_by_session failed: {e}")
                 raise
+
             finally:
                 _mcp_call_latency_ms.record(
                     (time.perf_counter() - start) * 1000,
@@ -114,18 +167,52 @@ class MCPClient:
     @staticmethod
     async def check(self):
         """Run MCP client demo: ping, list, call tool, read resource."""
-        async with self.client:
-            await self.client.ping()
+        async with self._default_client:
+            await self._default_client.ping()
             logging.info("ping: OK")
 
-            result = await self.client.list_tools()
+            result = await self._default_client.list_tools()
             logging.info(f"list_tools: {result}")
 
-            result = await self.client.list_prompts()
+            result = await self._default_client.list_prompts()
             logging.info(f"list_prompts: {result}")
 
-            result = await self.client.list_resources()
+            result = await self._default_client.list_resources()
             logging.info(f"list_resources: {result}")
+
+    def _strip_server_prefix(self, mcp_name: str, server_name: str) -> str:
+        """Strip server prefix from tool name to match actual MCP tool name.
+
+        Example: 'personal_tool_health_check' -> 'tool_health_check' for 'personal' server
+        """
+        prefix = f"{server_name}_"
+        if mcp_name.startswith(prefix):
+            return mcp_name[len(prefix) :]
+        return mcp_name
+
+    def get_server_from_tool_name(self, tool_name: str) -> tuple[str | None, str]:
+        """Extract server name from prefixed tool name.
+
+        Args:
+            tool_name: Tool name which may have server prefix (e.g., 'personal_tool_health_check')
+
+        Returns:
+            Tuple of (server_name, original_tool_name)
+            - server_name: None if no prefix found (default server)
+            - original_tool_name: tool name without prefix
+
+        Example: 'personal_tool_health_check' -> ('personal', 'tool_health_check')
+                 'smart-tree_quick_tree' -> ('smart-tree', 'quick_tree')
+                 'unknown_tool' -> (None, 'unknown_tool')
+        """
+        # Check registered servers first
+        for server_name in self._servers.keys():
+            prefix = f"{server_name}_"
+            if tool_name.startswith(prefix):
+                return (server_name, tool_name[len(prefix) :])
+
+        # No prefix found - use default server
+        return (None, tool_name)
 
     # tool, resource, prompt method use from fastapi gateway to orchestrator
     async def run_client(
@@ -134,18 +221,38 @@ class MCPClient:
         mcp_name: str,
         call_type: Union["tool", "resource", "prompt"],
         arguments: Optional[dict] = None,
+        server_name: Optional[str] = None,
     ):
-        """Execute a tool via MCP call_tool."""
+        """Execute a tool via MCP call_tool.
 
-        # Fix empty dict input
-        arguments = arguments or {}
+        Args:
+            trace_id: Trace identifier for logging.
+            mcp_name: Registered MCP tool name (may include server prefix).
+            call_type: Type of call (tool, resource, prompt).
+            arguments: Tool arguments.
+            server_name: Optional server name to route the call.
+                        If None, uses default server.
+        """
+        # Select client: server_name if provided and exists, else default
+        if server_name and server_name in self._servers:
+            client = self._servers[server_name]
+            actual_server = server_name
+            # Strip prefix from tool name to match actual MCP tool name (dupicated maybe removed in the future)
+            name = self._strip_server_prefix(mcp_name, actual_server)
+        else:
+            client = self._default_client
+            actual_server = server_name or "default"
+            # For default server, strip 'personal_' prefix if present (dupicated maybe removed in the future)
+            name = self._strip_server_prefix(mcp_name, "personal")
+            # If no prefix was stripped, use original name
+            if name == mcp_name:
+                name = mcp_name
 
-        name, args, call_type = self._build_tool_payload(
-            trace_id, mcp_name, call_type, arguments
-        )
+        # -- Trace block start -- #
         attrs = {
             "mcp.name": mcp_name,
             "mcp.call_type": call_type,
+            "mcp.server": actual_server,
         }
         meta = build_propagation_meta(trace_id)
         start = time.perf_counter()
@@ -154,17 +261,23 @@ class MCPClient:
             set_span_correlation(span, trace_id)
             span.set_attribute("mcp.name", mcp_name)
             span.set_attribute("mcp.call_type", call_type)
+            span.set_attribute("mcp.server", actual_server)
             span.add_event("mcp.call.started")
+
+            # -- Trace block end -- #
+
             try:
                 if call_type == "tool":
-                    async with self._client:
+                    async with client:
                         try:
-                            result = await self._client.call_tool(
+                            result = await client.call_tool(
                                 name,
                                 args,
                                 timeout=5,
                                 meta=meta,
                             )
+
+                            # -- Trace block start -- #
                             _mcp_calls_total.add(1, attributes=attrs)
                             span.add_event("mcp.call.succeeded")
                             logging.info(f"[{trace_id}] run_tool/{mcp_name}: {result}")
@@ -172,6 +285,8 @@ class MCPClient:
                                 "trace_id": trace_id,
                                 "result": result,
                             }
+                            # -- Trace block end -- #
+
                         except Exception as e:
                             _mcp_errors_total.add(1, attributes=attrs)
                             span.set_status(Status(StatusCode.ERROR))
@@ -182,9 +297,9 @@ class MCPClient:
                             raise
 
                 if call_type == "resource":
-                    async with self._client:
+                    async with client:
                         try:
-                            result = await self._client.read_resource(
+                            result = await client.read_resource(
                                 uri=mcp_name,
                                 meta=meta,
                             )
@@ -207,9 +322,9 @@ class MCPClient:
                             raise
 
                 if call_type == "prompt":
-                    async with self._client:
+                    async with client:
                         try:
-                            result = await self._client.get_prompt(
+                            result = await client.get_prompt(
                                 mcp_name,
                                 arguments={"trace_id": trace_id},
                                 meta=meta,
@@ -244,7 +359,8 @@ class MCPClient:
 
 if __name__ == "__main__":
     # Test code to run the MCP client and execute a tool call
-    client_obj = MCPClient(base_url=SERVER_URL)
+    servers_config = load_servers_config()
+    client_obj = MCPClient(base_url=SERVER_URL, servers_config=servers_config)
 
     # We run the async function inside asyncio with handle it in parallel
     output = asyncio.run(

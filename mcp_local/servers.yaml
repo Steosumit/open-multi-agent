@@ -1,0 +1,8 @@
+# A standard list of MCP servers for compatible clients
+servers:
+  - name: "personal"
+    url: "http://127.0.0.1:9000/mcp"
+    transport: "http"
+  - name: "smart-tree"
+    url: "http://127.0.0.1:3000/mcp"
+    transport: "http"
