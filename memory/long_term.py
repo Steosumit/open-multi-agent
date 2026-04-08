@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 import chromadb
 from langchain_chroma import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_mistralai import MistralAIEmbeddings
 from langchain_core.documents import Document
 
 from core.config import EMBEDDING_MODEL
@@ -23,9 +24,10 @@ class LongTermMemory:
         self.user_id = user_id
 
         # Initialize Embeddings
-        self.embedding_function = GoogleGenerativeAIEmbeddings(
-            model=EMBEDDING_MODEL,
-        )
+        # self.embedding_function = GoogleGenerativeAIEmbeddings(
+        #     model=EMBEDDING_MODEL,
+        # )
+        self.embedding_function = MistralAIEmbeddings(model=EMBEDDING_MODEL)  # TODO: switch to Mistral when available
 
         # Initialize Vector Store (HTTP Client)
         # The Chroma server (Docker) handles persistence via volume mount

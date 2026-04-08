@@ -17,6 +17,7 @@ from langchain_core.messages import (
 )
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mistralai import ChatMistralAI
+from langchain_mistralai import MistralAIEmbeddings
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
@@ -104,12 +105,12 @@ async def llm_node(state: MessagesState) -> dict:
             _llm_calls_counter.add(1, attributes=attrs)
 
             # LLM #
-            model_raw = ChatGoogleGenerativeAI(
-                model=LLM_MODEL, temperature=LLM_TEMPERATURE
-            )
-            # model_raw = ChatMistralAI(
+            # model_raw = ChatGoogleGenerativeAI(
             #     model=LLM_MODEL, temperature=LLM_TEMPERATURE
             # )
+            model_raw = ChatMistralAI(
+                model=LLM_MODEL, temperature=LLM_TEMPERATURE
+            )
 
             # Get the latest raw tool list from ALL mcp servers at each run
             # mcp tools are converted to langchain compatible tools
@@ -260,8 +261,9 @@ async def summarize_node(state: MessagesState) -> dict:
             )
 
             # Independent summary model
-            model = ChatGoogleGenerativeAI(model=LLM_MODEL, temperature=0)
-
+            #model = ChatGoogleGenerativeAI(model=LLM_MODEL, temperature=0)
+            model = ChatMistralAI(model=LLM_MODEL, temperature=0)
+            
             # Get summary prompt from MCP
             result = await mcp_client.run_client(
                 trace_id=trace_id, mcp_name="summary_prompt", call_type="prompt"
