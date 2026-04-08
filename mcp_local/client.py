@@ -1,14 +1,14 @@
 import asyncio
+import logging
+import pathlib
 import time
 from typing import Optional, Union
 
 import yaml
 from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport, StdioTransport
 from langchain_mcp_adapters.tools import load_mcp_tools
 from opentelemetry.trace import Status, StatusCode
-
-import logging
-import pathlib
 
 from mcp_local.config import SERVER_URL
 from observability import (
@@ -61,18 +61,43 @@ class MCPClient:
     """MCP tool runner using fastmcp async client. Supports multiple servers."""
 
     def __init__(self, base_url: str, servers_config: list[dict] | None = None) -> None:
-        self._default_client = Client(base_url)
+        self._default_client = Client(StreamableHttpTransport(url=base_url))
         self._servers: dict[str, Client] = {}
 
         # Dynamically add servers from config
         if servers_config:
             for server in servers_config:
-                self.add_server(server["name"], server["url"])
+                self.add_server(server["name"], server)
 
-    def add_server(self, name: str, base_url: str) -> None:
+    def _create_transport(
+        self, config: dict
+    ) -> Union[StreamableHttpTransport, StdioTransport]:
+        """Create the Client object based on the config"""
+
+        transport_type = config.get("transport", "http")
+
+        if transport_type == "http":
+            return StreamableHttpTransport(
+                url=config["url"],
+                headers=config.get("headers"),
+            )
+        elif transport_type == "stdio":
+            return StdioTransport(
+                command=config["command"],
+                args=config.get("args", []),
+                env=config.get("env", {}),
+                cwd=config.get("cwd", None),
+            )
+        else:
+            raise ValueError(f"Unknown transport: {transport_type}")
+
+    def add_server(self, name: str, config: dict) -> None:
         """Register a new MCP server dynamically."""
-        self._servers[name] = Client(base_url)
-        logging.info(f"Registered MCP server: {name} at {base_url}")
+        transport = self._create_transport(config)
+        self._servers[name] = Client(transport)
+        logging.info(
+            f"Registered MCP server '{name}' with transport '{config.get('transport', 'http')}'"
+        )
 
     async def list_tools_all(self) -> list:
         """List tools from all registered servers with namespace prefix."""
@@ -272,8 +297,8 @@ class MCPClient:
                         try:
                             result = await client.call_tool(
                                 name,
-                                args,
-                                timeout=5,
+                                arguments,
+                                timeout=60*3,
                                 meta=meta,
                             )
 
@@ -360,10 +385,24 @@ class MCPClient:
 if __name__ == "__main__":
     # Test code to run the MCP client and execute a tool call
     servers_config = load_servers_config()
-    client_obj = MCPClient(base_url=SERVER_URL, servers_config=servers_config)
+    client_obj = StdioTransport(
+        command="node",
+        args=[
+            "D:\\Work\\Projects\\open-multi-agent\\external\\g-search-mcp\\build\\index.js"
+        ],
+    )
 
     # We run the async function inside asyncio with handle it in parallel
-    output = asyncio.run(
-        client_obj.run_client("trace-123", "tool_health_check", "tool")
-    )
-    logging.info(f"Tool execution result: {output}")
+
+    async def test():
+        async with Client(client_obj) as client:
+            # output = await client.list_tools()
+            # print("Tools:", output)
+            output = await client.call_tool(
+                "search",
+                {"queries": ["what is the time"]},
+                timeout=30,
+            )
+            print("Search result:", output)
+
+    asyncio.run(test())

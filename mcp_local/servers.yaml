@@ -1,8 +1,17 @@
 # A standard list of MCP servers for compatible clients
+# HTTP servers are assumed to be running and accessible at the specified URL
+# STDIO servers will be spawned as child processes when needed
 servers:
   - name: "personal"
     url: "http://127.0.0.1:9000/mcp"
     transport: "http"
-  - name: "smart-tree"
-    url: "http://127.0.0.1:3000/mcp"
-    transport: "http"
+
+  - name: "mcp-server-playwright"
+    transport: stdio
+    command: node
+    args: ["D:\\Work\\Projects\\open-multi-agent\\external\\mcp-server-playwright\\dist\\index.js"]
+
+  - name: "g-search-mcp"
+    transport: stdio
+    command: node
+    args: ["D:\\Work\\Projects\\open-multi-agent\\external\\g-search-mcp\\build\\index.js"]
