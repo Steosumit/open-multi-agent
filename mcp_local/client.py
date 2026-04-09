@@ -298,7 +298,7 @@ class MCPClient:
                             result = await client.call_tool(
                                 name,
                                 arguments,
-                                timeout=60*3,
+                                timeout=60 * 3,
                                 meta=meta,
                             )
 
@@ -384,25 +384,29 @@ class MCPClient:
 
 if __name__ == "__main__":
     # Test code to run the MCP client and execute a tool call
-    servers_config = load_servers_config()
+    # NOTE: Update the path below to point to your actual external MCP server
+
+    # Example: Test with MCP-Server-Playwright
     client_obj = StdioTransport(
         command="node",
         args=[
-            "D:\\Work\\Projects\\open-multi-agent\\external\\g-search-mcp\\build\\index.js"
+            "D:\\Work\\Projects\\open-multi-agent\\external\\MCP-Server-Playwright\\dist\\index.js"
         ],
     )
 
-    # We run the async function inside asyncio with handle it in parallel
-
     async def test():
+        # Using a single context block for both list_tools and call_tool
         async with Client(client_obj) as client:
-            # output = await client.list_tools()
-            # print("Tools:", output)
-            output = await client.call_tool(
-                "search",
-                {"queries": ["what is the time"]},
-                timeout=30,
-            )
-            print("Search result:", output)
+            # List available tools
+            output = await client.list_tools()
+            print(f"Tools available: {len(output)}")
+
+            # Example: Call a tool
+            # result = await client.call_tool(
+            #     "browser_navigate",
+            #     {"url": "https://google.com"},
+            #     timeout=30,
+            # )
+            # print("Result:", result)
 
     asyncio.run(test())
