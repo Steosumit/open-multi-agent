@@ -94,7 +94,7 @@ mcp = FastMCP(
 # TOOLS #
 @mcp.tool(name="tool_health_check")
 @sanitize_args("tool_health_check")
-def tool_health_check(ctx: Context, curr_time: str) -> str:
+def tool_health_check(ctx: Context) -> str:
     """Used to check if the server is running."""
     start = time.perf_counter()
     attrs = {"handler": "tool_health_check", "mcp.call_type": "tool"}
@@ -110,6 +110,8 @@ def tool_health_check(ctx: Context, curr_time: str) -> str:
         _server_latency_ms.record(
             (time.perf_counter() - start) * 1000, attributes=attrs
         )
+        
+        curr_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         return f"Server is healthy and running as of {curr_time}"
 
 
