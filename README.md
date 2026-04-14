@@ -1,4 +1,4 @@
-# open-multi-agent
+# open-multi-agent v0.0.1 (April 14, 2026)
 
 A modular, production-ready multi-agent orchestration framework built on LangGraph, FastAPI, and Model Context Protocol (MCP). Seamlessly orchestrate complex AI agent workflows with built-in memory management, observability, and secure integration capabilities.
 
@@ -37,7 +37,7 @@ Built-in OpenTelemetry instrumentation:
 - Request-level context propagation
 - Performance metrics and error tracking
 
-### Security (Planned)
+### Security
 - Tool Access Control
 - Argument Sanitization
 
