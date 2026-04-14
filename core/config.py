@@ -25,6 +25,8 @@ REDIS_URL = "redis://localhost:6379/"
 MESSAGES_BUFFER_LTM = 5  # messages to keep
 SUMMARISE_MESSAGE_THRESHOLD = 5
 
+# Security
+ALLOWED_TOOLS = ""
 # Helper configuration definitions
 
 
