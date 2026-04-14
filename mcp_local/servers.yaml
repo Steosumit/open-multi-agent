@@ -1,0 +1,17 @@
+# A standard list of MCP servers for compatible clients
+# HTTP servers are assumed to be running and accessible at the specified URL
+# STDIO servers will be spawned as child processes when needed
+servers:
+  - name: "personal"
+    transport: "http"
+    url: "http://127.0.0.1:9000/mcp"
+    
+
+  - name: "mcp-server-playwright"
+    transport: stdio
+    command: node
+    args: ["D:\\Work\\Projects\\open-multi-agent\\external\\mcp-server-playwright\\dist\\index.js"]
+
+  - name: "tavily_mcp"
+    transport: "http"
+    url: "https://mcp.tavily.com/mcp/?tavilyApiKey=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"

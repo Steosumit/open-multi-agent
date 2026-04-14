@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure MultiAgent Framework (Web UI)</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --terminal-green: #00ff00;
+            --terminal-green-dim: #00cc00;
+            --terminal-green-glow: #00ff00;
+            --agent-green: #00ff99;
+            --agent-green-dim: #00cc7a;
+            --bg-black: #000000;
+            --bg-dark: #0a0a0a;
+            --bg-panel: #0d0d0d;
+            --border-glow: #00ff0033;
+        }
+
+        body {
+            font-family: 'Consolas', 'Courier New', monospace;
+            background: var(--bg-black);
+            color: var(--terminal-green);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: var(--bg-dark);
+            border-bottom: 1px solid var(--terminal-green-dim);
+            box-shadow: 0 0 20px var(--border-glow);
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--terminal-green);
+            text-shadow: 0 0 10px var(--terminal-green-glow);
+            letter-spacing: 1px;
+        }
+
+        .header-clock {
+            font-size: 16px;
+            color: var(--terminal-green);
+            text-shadow: 0 0 8px var(--terminal-green-glow);
+            font-weight: bold;
+        }
+
+        /* Conversation Area */
+        .conversation-container {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-black);
+        }
+
+        .conversation-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            border-radius: 4px;
+            max-width: 80%;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message-user {
+            background: var(--bg-panel);
+            border: 1px solid var(--terminal-green-dim);
+            color: var(--terminal-green);
+            margin-left: auto;
+            box-shadow: 0 0 10px var(--border-glow);
+        }
+
+        .message-agent {
+            background: var(--bg-panel);
+            border: 1px solid var(--agent-green-dim);
+            color: var(--agent-green);
+            margin-right: auto;
+            box-shadow: 0 0 10px #00ff9933;
+        }
+
+        .message-label {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+
+        .message-time {
+            font-size: 10px;
+            opacity: 0.6;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        /* Thinking Animation */
+        .thinking-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            margin: 10px 0;
+        }
+
+        .thinking-text {
+            color: var(--terminal-green);
+            font-size: 14px;
+            text-shadow: 0 0 8px var(--terminal-green-glow);
+        }
+
+        /* Animation 1: Pulsing Dots */
+        .thinking-dots {
+            display: inline-flex;
+            gap: 5px;
+        }
+
+        .thinking-dots span {
+            animation: pulse 1.4s infinite ease-in-out both;
+        }
+
+        .thinking-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .thinking-dots span:nth-child(2) { animation-delay: -0.16s; }
+        .thinking-dots span:nth-child(3) { animation-delay: 0s; }
+
+        @keyframes pulse {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Animation 2: Rotating Cursor */
+        .thinking-cursor {
+            display: inline-block;
+            animation: rotateCursor 0.8s linear infinite;
+        }
+
+        @keyframes rotateCursor {
+            0% { content: '|'; }
+            25% { content: '/'; }
+            50% { content: '─'; }
+            75% { content: '\\'; }
+        }
+
+        .thinking-cursor::after {
+            content: '|';
+            animation: cursorBlink 0.5s step-end infinite;
+        }
+
+        @keyframes cursorBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Animation 3: Wave */
+        .thinking-wave {
+            display: inline-block;
+            font-size: 16px;
+            animation: wave 1s ease-in-out infinite;
+        }
+
+        @keyframes wave {
+            0%, 100% { transform: translateY(0); }
+            25% { transform: translateY(-5px); }
+            75% { transform: translateY(5px); }
+        }
+
+        /* Input Section */
+        .input-section {
+            padding: 15px 20px;
+            background: var(--bg-dark);
+            border-top: 1px solid var(--terminal-green-dim);
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-box {
+            flex: 1;
+            background: var(--bg-black);
+            border: 1px solid var(--terminal-green-dim);
+            color: var(--terminal-green);
+            padding: 12px 15px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .input-box:focus {
+            border-color: var(--terminal-green);
+            box-shadow: 0 0 15px var(--border-glow);
+        }
+
+        .input-box::placeholder {
+            color: #004400;
+        }
+
+        .input-box:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .send-button {
+            background: transparent;
+            border: 1px solid var(--terminal-green);
+            color: var(--terminal-green);
+            padding: 12px 25px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .send-button:hover:not(:disabled) {
+            background: var(--terminal-green);
+            color: var(--bg-black);
+            box-shadow: 0 0 20px var(--terminal-green-glow);
+        }
+
+        .send-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 10px 20px;
+            background: var(--bg-dark);
+            border-top: 1px solid var(--terminal-green-dim);
+            text-align: right;
+        }
+
+        .trace-id {
+            font-size: 12px;
+            color: var(--terminal-green-dim);
+            opacity: 0.7;
+        }
+
+        .trace-id span {
+            font-weight: bold;
+            color: var(--terminal-green);
+        }
+
+        /* Error Message */
+        .error-message {
+            background: #1a0000;
+            border: 1px solid #ff0000;
+            color: #ff4444;
+            padding: 10px 15px;
+            margin: 10px 20px;
+            border-radius: 4px;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-black);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--terminal-green-dim);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--terminal-green);
+        }
+
+        /* Empty State */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--terminal-green-dim);
+            opacity: 0.5;
+        }
+
+        .empty-state-text {
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        .matrix-char {
+            animation: glitch 2s infinite;
+        }
+
+        @keyframes glitch {
+            0%, 90%, 100% { transform: translate(0); }
+            92% { transform: translate(-2px, 1px); }
+            94% { transform: translate(2px, -1px); }
+            96% { transform: translate(-1px, 2px); }
+            98% { transform: translate(1px, -2px); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-title">Secure MultiAgent Framework (Web UI)</div>
+            <div class="header-clock">{{ currentTime }}</div>
+        </div>
+
+        <!-- Conversation Area -->
+        <div class="conversation-container">
+            <div class="conversation-area" ref="conversationArea">
+                <!-- Empty State -->
+                <div v-if="messages.length === 0" class="empty-state">
+                    <div class="matrix-char">_</div>
+                    <div class="empty-state-text">Awaiting input...</div>
+                </div>
+
+                <!-- Messages -->
+                <div v-for="(msg, index) in messages" :key="index" 
+                     class="message" 
+                     :class="msg.role === 'user' ? 'message-user' : 'message-agent'">
+                    <div class="message-label">{{ msg.role === 'user' ? 'You' : 'Agent' }}</div>
+                    <div class="message-content">{{ msg.content }}</div>
+                    <div class="message-time">{{ msg.timestamp }}</div>
+                </div>
+
+                <!-- Thinking Animation -->
+                <div v-if="isLoading" class="thinking-container">
+                    <div class="thinking-text">
+                        <template v-if="thinkingType === 0">
+                            <span class="thinking-dots">
+                                <span>.</span><span>.</span><span>.</span>
+                            </span>
+                            Processing
+                        </template>
+                        <template v-else-if="thinkingType === 1">
+                            Analyzing<span class="thinking-cursor"></span>
+                        </template>
+                        <template v-else>
+                            <span class="thinking-wave">~</span> Computing response
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Error Message -->
+                <div v-if="errorMessage" class="error-message">
+                    {{ errorMessage }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Section -->
+        <div class="input-section">
+            <input 
+                type="text" 
+                class="input-box" 
+                v-model="currentInput" 
+                @keyup.enter="sendMessage"
+                placeholder="Enter your message..."
+                :disabled="isLoading"
+            >
+            <button 
+                class="send-button" 
+                @click="sendMessage"
+                :disabled="isLoading || !currentInput.trim()"
+            >
+                Send
+            </button>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="trace-id">Trace ID: <span>{{ traceId }}</span></div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, nextTick, watch } = Vue;
+
+        createApp({
+            setup() {
+                const messages = ref([]);
+                const currentInput = ref('');
+                const isLoading = ref(false);
+                const traceId = ref('');
+                const currentTime = ref('');
+                const errorMessage = ref('');
+                const thinkingType = ref(0);
+                const conversationArea = ref(null);
+
+                // Generate UUID v4
+                function generateUUID() {
+                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                        const r = Math.random() * 16 | 0;
+                        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                        return v.toString(16);
+                    });
+                }
+
+                // Get current time in HH:MM:SS
+                function getCurrentTime() {
+                    const now = new Date();
+                    const hours = String(now.getHours()).padStart(2, '0');
+                    const minutes = String(now.getMinutes()).padStart(2, '0');
+                    const seconds = String(now.getSeconds()).padStart(2, '0');
+                    return `${hours}:${minutes}:${seconds}`;
+                }
+
+                // Update clock
+                function updateClock() {
+                    currentTime.value = getCurrentTime();
+                }
+
+                // Format message timestamp
+                function getMessageTime() {
+                    const now = new Date();
+                    const hours = String(now.getHours()).padStart(2, '0');
+                    const minutes = String(now.getMinutes()).padStart(2, '0');
+                    const seconds = String(now.getSeconds()).padStart(2, '0');
+                    return `${hours}:${minutes}:${seconds}`;
+                }
+
+                // Scroll to bottom
+                function scrollToBottom() {
+                    nextTick(() => {
+                        if (conversationArea.value) {
+                            conversationArea.value.scrollTop = conversationArea.value.scrollHeight;
+                        }
+                    });
+                }
+
+                // Send message
+                async function sendMessage() {
+                    const text = currentInput.value.trim();
+                    if (!text || isLoading.value) return;
+
+                    // Clear error
+                    errorMessage.value = '';
+
+                    // Add user message
+                    messages.value.push({
+                        role: 'user',
+                        content: text,
+                        timestamp: getMessageTime()
+                    });
+
+                    // Clear input
+                    currentInput.value = '';
+
+                    // Set loading state with random thinking type
+                    isLoading.value = true;
+                    thinkingType.value = Math.floor(Math.random() * 3);
+
+                    scrollToBottom();
+
+                    try {
+                        // Get gateway URL from environment or use default
+                        const gatewayUrl = 'http://localhost:8001';
+                        const endpoint = `${gatewayUrl}/agent-task`;
+
+                        const payload = {
+                            message: text,
+                            trace_id: traceId.value
+                        };
+
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(payload),
+                            signal: AbortSignal.timeout(300000) // 60 second timeout
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        const data = await response.json();
+
+                        // Update trace_id if not set
+                        if (!traceId.value && data.trace_id) {
+                            traceId.value = data.trace_id;
+                        }
+
+                        // Add agent response
+                        const agentContent = data.result || 'No response received';
+                        messages.value.push({
+                            role: 'agent',
+                            content: agentContent,
+                            timestamp: getMessageTime()
+                        });
+
+                    } catch (error) {
+                        errorMessage.value = `Error: ${error.message}`;
+                    } finally {
+                        isLoading.value = false;
+                        scrollToBottom();
+                    }
+                }
+
+                // Initialize
+                onMounted(() => {
+                    // Generate trace_id on mount
+                    traceId.value = generateUUID();
+
+                    // Start clock
+                    updateClock();
+                    setInterval(updateClock, 1000);
+                });
+
+                return {
+                    messages,
+                    currentInput,
+                    isLoading,
+                    traceId,
+                    currentTime,
+                    errorMessage,
+                    thinkingType,
+                    conversationArea,
+                    sendMessage
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

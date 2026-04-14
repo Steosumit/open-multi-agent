@@ -40,8 +40,13 @@ class GatewayClient:
         self.base_url = _get_gateway_base_url()
         self.timeout_seconds = _get_timeout_seconds()
 
-    async def send_message(self, message: str) -> AgentTaskResult:
+    async def send_message(
+        self, message: str, trace_id: str | None = None
+    ) -> AgentTaskResult:
         payload = {"message": message}
+        if trace_id:
+            payload["trace_id"] = trace_id
+
         endpoint = f"{self.base_url}/agent-task"
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
@@ -49,6 +54,6 @@ class GatewayClient:
             response.raise_for_status()
 
         data = response.json()
-        trace_id = str(data.get("trace_id", ""))
+        trace_id_response = str(data.get("trace_id", ""))
         result_text = _extract_result_text(data.get("result"))
-        return AgentTaskResult(trace_id=trace_id, result=result_text)
+        return AgentTaskResult(trace_id=trace_id_response, result=result_text)

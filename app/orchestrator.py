@@ -16,6 +16,8 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_mistralai import ChatMistralAI
+from langchain_mistralai import MistralAIEmbeddings
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
@@ -29,7 +31,7 @@ from core.config import (
     SUMMARISE_MESSAGE_THRESHOLD,
     get_short_term_memory_config,
 )
-from mcp_local.client import MCPClient
+from mcp_local.client import MCPClient, load_servers_config
 from mcp_local.config import SERVER_URL
 from memory.long_term import LongTermMemory
 from memory.short_term import get_short_term_memory
@@ -71,7 +73,8 @@ _node_latency_histogram = _meter.create_histogram(
 )
 
 # MCP client — single instance shared across nodes #
-mcp_client = MCPClient(base_url=SERVER_URL)
+servers_config = load_servers_config()
+mcp_client = MCPClient(base_url=SERVER_URL, servers_config=servers_config)
 
 # Long-term memory instance #
 long_term_memory = LongTermMemory()
@@ -102,15 +105,19 @@ async def llm_node(state: MessagesState) -> dict:
             _llm_calls_counter.add(1, attributes=attrs)
 
             # LLM #
-            model_raw = ChatGoogleGenerativeAI(
+            # model_raw = ChatGoogleGenerativeAI(
+            #     model=LLM_MODEL, temperature=LLM_TEMPERATURE
+            # )
+            model_raw = ChatMistralAI(
                 model=LLM_MODEL, temperature=LLM_TEMPERATURE
             )
 
-            # Get the latest raw tool list from the mcp server at each run
+            # Get the latest raw tool list from ALL mcp servers at each run
             # mcp tools are converted to langchain compatible tools
+            # Tools are prefixed with server name to avoid collisions
             tools = (
-                await mcp_client.list_tools_output_by_session()
-            )  # fetch the latest tools from MCP server
+                await mcp_client.list_tools_all()
+            )  # fetch the latest tools from ALL MCP servers
             model = model_raw.bind_tools(tools)
 
             # Attach the system prompt with dynamic tool description
@@ -184,6 +191,11 @@ async def tool_node(state: MessagesState) -> dict[str, list[ToolMessage]]:
                 tool_args: dict = tool_call["args"]
                 tool_call_id: str = tool_call["id"]
 
+                # Extract server_name from prefixed tool name
+                server_name, original_tool_name = mcp_client.get_server_from_tool_name(
+                    tool_name
+                )
+
                 _tool_calls_counter.add(
                     1,
                     attributes={**attrs, "tool.name": tool_name},
@@ -191,9 +203,10 @@ async def tool_node(state: MessagesState) -> dict[str, list[ToolMessage]]:
                 try:
                     response = await mcp_client.run_client(
                         trace_id=trace_id,
-                        mcp_name=tool_name,
+                        mcp_name=original_tool_name,
                         call_type="tool",
                         arguments=tool_args,
+                        server_name=server_name,
                     )
                     # Robustly handle MCP response structure
                     if response.get("result") and response["result"].content:
@@ -248,8 +261,9 @@ async def summarize_node(state: MessagesState) -> dict:
             )
 
             # Independent summary model
-            model = ChatGoogleGenerativeAI(model=LLM_MODEL, temperature=0)
-
+            #model = ChatGoogleGenerativeAI(model=LLM_MODEL, temperature=0)
+            model = ChatMistralAI(model=LLM_MODEL, temperature=0)
+            
             # Get summary prompt from MCP
             result = await mcp_client.run_client(
                 trace_id=trace_id, mcp_name="summary_prompt", call_type="prompt"

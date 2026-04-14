@@ -1,8 +1,11 @@
-import uuid
-import time
 import re
-from opentelemetry.trace import Status, StatusCode
+import time
+import uuid
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from opentelemetry.trace import Status, StatusCode
+
 from app.models import AgentTaskRequest, AgentTaskResponse
 from observability import (
     clear_current_trace_id,
@@ -14,8 +17,18 @@ from observability import (
     set_span_correlation,
 )
 
-
 app = FastAPI()
+
+# CORS
+# It makes sure what origins are allowed to access the gateway secondarily
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080"],  # Front origin
+    allow_credentials=True,
+    allow_methods=["*"],                      # Allow all methods (POST, GET, etc)
+    allow_headers=["*"],                      # Allow all headers
+)
+
 init_observability(service_name="fastapi-gateway")
 instrument_fastapi_app(app)
 
