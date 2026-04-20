@@ -2,6 +2,64 @@
 
 A modular, production-ready multi-agent orchestration framework built on LangGraph, FastAPI, and Model Context Protocol (MCP). Seamlessly orchestrate complex AI agent workflows with built-in memory management, observability, and secure integration capabilities.
 
+## Workflow Diagram
+
+```mermaid
+---
+config:
+  theme: mc
+  layout: dark
+---
+flowchart RL
+ subgraph FastAPIGateway["FastAPI Gateway"]
+        Gateway["REST Interface"]
+        Validate["Input Validation & Schema Check"]
+        Trace["Assign Trace ID"]
+  end
+ subgraph LangGraphOrchestrator["LangGraph Orchestrator"]
+        InputNode["Input Node"]
+        IntentNode["Intent Classification Node"]
+        ToolDecision["Tool Decision Node"]
+        ToolExec["Tool Execution Node"]
+        MemoryUpdate["Memory Update Node"]
+        ResponseFormat["Response Formatter Node"]
+  end
+ subgraph MCPLayer["MCP Layer"]
+        MCPInterface["MCP Interface\n(MCP Client + Server)"]
+        LLM["LLM Provider"]
+        ExternalAPI["External APIs / Tools"]
+  end
+ subgraph MemorySystem["Memory System"]
+        ShortTerm["Short-Term Memory<br>(Graph State)"]
+        LongTermDB["Long-Term Memory<br>(SQLite / Logs)"]
+        VectorDB["Vector DB<br>(Notes Embeddings)"]
+  end
+ subgraph ObservabilityLayer["Observability"]
+        Logger["Structured Logger"]
+        Metrics["Execution Time Metrics"]
+        TraceStore["Trace Storage"]
+  end
+    Client["Client App / OpenClaw"] -- A2A HTTP Request --> Gateway
+    Gateway --> Validate
+    Validate --> Trace
+    Trace --> LangGraphCore["LangGraph Entry"]
+    LangGraphCore --> InputNode
+    InputNode --> IntentNode & Logger
+    IntentNode --> ToolDecision
+    ToolDecision --> ToolExec
+    ToolExec --> MemoryUpdate & MCPInterface & Metrics
+    MemoryUpdate --> ResponseFormat & ShortTerm & LongTermDB & VectorDB
+    MCPInterface --> LLM & ExternalAPI
+    ResponseFormat --> TraceStore
+    ResponseFormat -- Structured Response --> Gateway
+    Gateway -- HTTP Response --> Client
+
+    style FastAPIGateway fill:maroon
+    style MCPLayer color:#000000,fill:black
+    style MemorySystem fill:purple
+    style ObservabilityLayer fill:green
+```
+
 ## Technologies
 
 - **LangGraph** - Agent orchestration and workflow management
@@ -106,27 +164,7 @@ In the future I will be applying LLM Top 10 best practices to make the agent mor
        -ContentType "application/json" `
        -Body $body
    ```
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     FastAPI Gateway (8001)                  │
-│                    (HTTP API Interface)                      │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                    LangGraph Orchestrator                    │
-│         (llm_node → tool_node → summarization_node)          │
-└──────┬───────────────────────┬──────────────────────┬───────┘
-       │                       │                      │
-   ┌───▼────┐         ┌────────▼────┐       ┌────────▼────┐
-   │  MCP    │         │   Memory    │       │    Tracing  │
-   │ Server  │         │  (Redis +   │       │ (OpenTel)   │
-   │ (8000)  │         │ ChromaDB)   │       │   (OTLP)    │
-   └─────────┘         └─────────────┘       └─────────────┘
-```
-
+   
 ## Project Structure
 
 ```
